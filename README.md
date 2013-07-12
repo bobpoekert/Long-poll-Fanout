@@ -24,8 +24,7 @@ There are two response formats:
 
 * sse: Server-Sent Events. This response format is compatible with the EventSource api available in most browsers. The event types are the urls you requested, and the data is the request body.
 
-* bin: A simple binary format that is more efficient and better suited to native clients. Responses in this format are sequences of messages in the form
-    <request url>\n<big-endian uint32_t length field><length bytes of data>
+* bin: A simple binary format that is more efficient and better suited to native clients. Responses in this format are sequences of messages in the form `<request url>\n<big-endian uint32_t length field><length bytes of data>`
 
 Dependencies
 ------------
