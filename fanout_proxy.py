@@ -3,13 +3,13 @@ import tornado.httpclient as http
 from tornado.options import define, options
 import weakref, re, struct
 from functools import partial
-import cStringIO as StringIO
+from cStringIO import StringIO
 
 define('auth_url',
     help='An endpoint that takes post requests with comma-separated lists of urls and returns either 200 indicating the client is allowed to access those urls or 403 otherwise')
 define('port', default='5000')
 
-def make_sse_response_blob(url, repsonse):
+def make_sse_response_blob(url, response):
     res = StringIO()
     res.write('event: %s\n' % url)
     lines = re.split(r'[\r\n]+', response.body)
@@ -65,6 +65,7 @@ class KeyMapping(object):
         self.serializer_references = ReferenceCounter()
 
     def add(self, key, serializer, client):
+        print key
         self.serializer_references.add(serializer)
         try:
             s = self.keys_to_clients[key]
@@ -76,6 +77,7 @@ class KeyMapping(object):
         s.add(weakref.ref(client, partial(self.remove_value, key, serializer)))
 
     def remove_value(self, key, serializer, ref):
+        print 'remove %s' % key
         self.serializer_references.remove(serializer)
         v = self.keys_to_clients[key]
         v.remove(ref)
@@ -83,6 +85,7 @@ class KeyMapping(object):
             del self.keys_to_clients[v]
 
     def fetch_url(self, url):
+        print url
         http.AsyncHTTPClient().fetch(url, partial(self.got_url, url))
 
     def got_url(self, url, response):
@@ -95,7 +98,7 @@ class KeyMapping(object):
 
         for client_ref in refs:
             client = client_ref()
-            client.send_blob(url, serial[client.serializer])
+            client.send_blob(serial[client.serializer])
 
         self.fetch_url(url)
 
@@ -113,18 +116,24 @@ class PersistentClientHandler(web.RequestHandler):
             self.finish()
             return
 
-        headers = self.request.headers()
+        headers = self.request.headers
         headers.add('X-Real-IP', self.request.remote_ip)
-        request = httpclient.HTTPRequest(
-            config.auth_url,
+        request = http.HTTPRequest(
+            options.auth_url,
+            body=urls,
+            method='POST',
             headers=headers)
-        AsyncHTTPClient().fetch(request, self.got_auth_response)
+        http.AsyncHTTPClient().fetch(request, self.got_auth_response)
 
     def got_auth_response(self, response):
+        print response.code
         if response.code == 200:
             self.setup_connections()
         else:
-            self.set_status(response.code)
+            try:
+                self.set_status(response.code)
+            except ValueError:
+                self.set_status(500)
             self.finish(response.body)
 
     def setup_connections(self):
