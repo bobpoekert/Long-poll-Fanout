@@ -1,7 +1,7 @@
 import tornado.web as web
 import tornado.httpclient as http
 from tornado.options import define, options
-import weakref, re, msgpack
+import weakref, re, struct
 from functools import partial
 import cStringIO as StringIO
 
@@ -22,7 +22,7 @@ def make_binary_response_blob(url, response):
     res = StringIO()
     res.write(url)
     res.write('\n')
-    res.write(msgpack.packb('>I', len(response.body)))
+    res.write(struct.pack('>I', len(response.body)))
     res.write(response.body)
     return res.getvalue()
 
