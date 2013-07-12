@@ -1,7 +1,7 @@
 import tornado.web as web
 import tornado.httpclient as http
 from tornado.options import define, options
-import weakref, re, struct
+import re, struct
 from functools import partial
 from cStringIO import StringIO
 
@@ -74,15 +74,17 @@ class KeyMapping(object):
             self.keys_to_clients[key] = s
             self.fetch_url(key)
 
-        s.add(weakref.ref(client, partial(self.remove_value, key, serializer)))
+        s.add(client)
 
-    def remove_value(self, key, serializer, ref):
+        return partial(self.remove_value, key, serializer, client)
+
+    def remove_value(self, key, serializer, client):
         print 'remove %s' % key
         self.serializer_references.remove(serializer)
         v = self.keys_to_clients[key]
-        v.remove(ref)
+        v.remove(client)
         if not v:
-            del self.keys_to_clients[v]
+            del self.keys_to_clients[key]
 
     def fetch_url(self, url):
         print url
@@ -96,8 +98,7 @@ class KeyMapping(object):
 
         serial = dict((s, s(url, response)) for s in self.serializer_references.values())
 
-        for client_ref in refs:
-            client = client_ref()
+        for client in refs:
             client.send_blob(serial[client.serializer])
 
         self.fetch_url(url)
@@ -109,6 +110,7 @@ class PersistentClientHandler(web.RequestHandler):
     @web.asynchronous
     def get(self, serializer, urls):
         self.urls = urls
+        self.finish_callbacks = []
         try:
             self.serializer = serializers[serializer]
         except KeyError:
@@ -126,7 +128,6 @@ class PersistentClientHandler(web.RequestHandler):
         http.AsyncHTTPClient().fetch(request, self.got_auth_response)
 
     def got_auth_response(self, response):
-        print response.code
         if response.code == 200:
             self.setup_connections()
         else:
@@ -139,12 +140,17 @@ class PersistentClientHandler(web.RequestHandler):
     def setup_connections(self):
         urls = self.urls.split(',')
         for url in urls:
-            key_mapping.add(url, self.serializer, self)
+            self.finish_callbacks.append(key_mapping.add(url, self.serializer, self))
         self.set_status(200)
 
     def send_blob(self, blob):
         self.write(blob)
         self.flush()
+
+    def on_connection_close(self):
+        for c in self.finish_callbacks:
+            c()
+        web.RequestHandler.on_connection_close(self)
 
 app = web.Application([
     ('/(.*?)/(.*)', PersistentClientHandler)
