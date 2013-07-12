@@ -32,3 +32,9 @@ Dependencies
 Python 2.7
 
 Tornado
+
+TODO
+-----
+
+* Honor Cache-Control and Expires headers (changing the polling interval)
+* Allow upstream servers to use postbacks instead of polling
