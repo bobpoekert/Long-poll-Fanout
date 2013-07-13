@@ -111,9 +111,9 @@ class KeyMapping(object):
                 ioloop.add_timeout(
                     interval,
                     partial(self.fetch_url, url))
+                return
             except ValueError:
                 pass
-            return
 
         if 'Cache-Control' in response.headers:
             dt = http_utils.parse_cache_control(response.headers['Cache-Control'])
