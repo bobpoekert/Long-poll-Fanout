@@ -6,10 +6,13 @@ import re, struct, datetime, time
 import http_utils
 from functools import partial
 from cStringIO import StringIO
+from datetime import timedelta
 
 define('auth_url',
     help='An endpoint that takes post requests with comma-separated lists of urls and returns either 200 indicating the client is allowed to access those urls or 403 otherwise')
 define('port', default='5000')
+define('default_polling_interval', default=5,
+    help="How many seconds to wait between polling requests if no cache interval is supplied")
 
 ioloop = IOLoop.instance()
 
@@ -62,32 +65,32 @@ class ReferenceCounter(object):
     def values(self):
         return self.mapping.keys()
 
-class KeyMapping(object):
+class UrlMapping(object):
 
     def __init__(self):
         self.keys_to_clients = {}
         self.serializer_references = ReferenceCounter()
 
-    def add(self, key, serializer, client):
+    def add(self, url, serializer, client):
         self.serializer_references.add(serializer)
         try:
-            s = self.keys_to_clients[key]
+            s = self.keys_to_clients[url]
         except KeyError:
             s = set([])
-            self.keys_to_clients[key] = s
-            self.fetch_url(key)
+            self.keys_to_clients[url] = s
+            self.fetch_url(url)
 
         s.add(client)
 
-        return partial(self.remove_value, key, serializer, client)
+        return partial(self.remove_value, url, serializer, client)
 
-    def remove_value(self, key, serializer, client):
-        print 'remove %s' % key
+    def remove_value(self, url, serializer, client):
+        print 'remove %s' % url
         self.serializer_references.remove(serializer)
-        v = self.keys_to_clients[key]
+        v = self.keys_to_clients[url]
         v.remove(client)
         if not v:
-            del self.keys_to_clients[key]
+            del self.keys_to_clients[url]
 
     def fetch_url(self, url):
         print url
@@ -104,13 +107,13 @@ class KeyMapping(object):
         for client in refs:
             client.send_blob(serial[client.serializer])
 
+        recur = partial(self.fetch_url, url)
+
         if 'Expires' in response.headers:
             try:
                 interval = http_utils.http_date_to_epoch(response.headers['Expires'])
                 print 'waiting until %d' % interval
-                ioloop.add_timeout(
-                    interval,
-                    partial(self.fetch_url, url))
+                ioloop.add_timeout(interval, recur)
                 return
             except ValueError:
                 pass
@@ -119,12 +122,12 @@ class KeyMapping(object):
             dt = http_utils.parse_cache_control(response.headers['Cache-Control'])
             if dt:
                 print 'waiting %r' % dt
-                ioloop.add_timeout(dt, partial(self.fetch_url, url))
+                ioloop.add_timeout(dt, recur)
                 return
 
-        self.fetch_url(url)
+        ioloop.add_timeout(timedelta(seconds=options.default_polling_interval), recur)
 
-key_mapping = KeyMapping()
+url_mapping = UrlMapping()
 
 class PersistentClientHandler(web.RequestHandler):
 
@@ -161,7 +164,7 @@ class PersistentClientHandler(web.RequestHandler):
     def setup_connections(self):
         urls = self.urls.split(',')
         for url in urls:
-            self.finish_callbacks.append(key_mapping.add(url, self.serializer, self))
+            self.finish_callbacks.append(url_mapping.add(url, self.serializer, self))
         self.set_status(200)
 
     def send_blob(self, blob):
