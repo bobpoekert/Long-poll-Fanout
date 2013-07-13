@@ -82,7 +82,7 @@ class UrlMapping(object):
 
         s.add(client)
 
-        return partial(self.remove_value, url, serializer, client)
+        return partial(self.remove_value, url, serializer)
 
     def remove_value(self, url, serializer, client):
         print 'remove %s' % url
@@ -173,7 +173,7 @@ class PersistentClientHandler(web.RequestHandler):
 
     def on_connection_close(self):
         for c in self.finish_callbacks:
-            c()
+            c(self)
         web.RequestHandler.on_connection_close(self)
 
 app = web.Application([
