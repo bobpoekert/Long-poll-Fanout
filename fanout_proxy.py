@@ -1,13 +1,17 @@
 import tornado.web as web
 import tornado.httpclient as http
+from tornado.ioloop import IOLoop
 from tornado.options import define, options
-import re, struct
+import re, struct, datetime, time
+import http_utils
 from functools import partial
 from cStringIO import StringIO
 
 define('auth_url',
     help='An endpoint that takes post requests with comma-separated lists of urls and returns either 200 indicating the client is allowed to access those urls or 403 otherwise')
 define('port', default='5000')
+
+ioloop = IOLoop.instance()
 
 def make_sse_response_blob(url, response):
     res = StringIO()
@@ -65,7 +69,6 @@ class KeyMapping(object):
         self.serializer_references = ReferenceCounter()
 
     def add(self, key, serializer, client):
-        print key
         self.serializer_references.add(serializer)
         try:
             s = self.keys_to_clients[key]
@@ -100,6 +103,24 @@ class KeyMapping(object):
 
         for client in refs:
             client.send_blob(serial[client.serializer])
+
+        if 'Expires' in response.headers:
+            try:
+                interval = http_utils.http_date_to_epoch(response.headers['Expires'])
+                print 'waiting until %d' % interval
+                ioloop.add_timeout(
+                    interval,
+                    partial(self.fetch_url, url))
+            except ValueError:
+                pass
+            return
+
+        if 'Cache-Control' in response.headers:
+            dt = http_utils.parse_cache_control(response.headers['Cache-Control'])
+            if dt:
+                print 'waiting %r' % dt
+                ioloop.add_timeout(dt, partial(self.fetch_url, url))
+                return
 
         self.fetch_url(url)
 
@@ -157,8 +178,7 @@ app = web.Application([
 ])
 
 if __name__ == '__main__':
-    import tornado.ioloop as ioloop
     options.parse_command_line()
     assert options.auth_url, 'You must specify an auth_url'
     app.listen(options.port)
-    ioloop.IOLoop.instance().start()
+    ioloop.start()
