@@ -1,7 +1,7 @@
-Long-poll-Fanout
-================
+Long-poll Fanout
+==============
 
-A proxy server that broadcasts the responses of long-polling requests to multiple clients. Given a sequence of request urls this server will poll those urls (at most one request per url at a time) and send the responses to the client down a persistent connection. When a response is recieved from a given url, that response is copied and sent to all clients requesting that url.
+A proxy server that broadcasts the responses of long-polling requests to multiple clients. Given a sequence of request urls this server will poll those urls (at most one request per url at a time) and send the responses to the clients down a persistent connection. When a response is recieved from a given url, that response is copied and sent to all clients requesting that url.
 
 Usage
 -----
@@ -13,12 +13,12 @@ curl 'http://localhost:5000/bin/http://www.example.com/a,http://www.example.com/
 Authorizaiton
 -------------
 
-Before a client is sent any data, a POST request is made to the auth\_server url you specified. It's sent the comma-separated list of urls that the user provided as postdata. If this endpoint returns a 200 response, the request is allowed to continue. Otherwise, the response from the auth server is passed on to the client and the request is terminated.
+Before a client is sent any data, a POST request is made to the auth\_server url you specified. It's sent as postdata the comma-separated list of urls that the user provided. If this endpoint returns a 200 response, the request is allowed to continue. Otherwise, the response from the auth server is passed on to the client and the request is terminated.
 
 Response Formats
 ---------------
 
-You can specify the response format you want in the first element of the url path.
+You can specify the response format you want in the first element of the url path. e.g.: `/sse/http://www.google.com` or `/bin/http://www.google.com`
 
 There are two response formats:
 
@@ -37,6 +37,7 @@ TODO
 -----
 
 * Allow upstream servers to use postbacks instead of polling
+* Integrate with redis pubsub?
 
 License
 -------
